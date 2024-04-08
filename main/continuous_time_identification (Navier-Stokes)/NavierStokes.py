@@ -17,9 +17,15 @@ from mpl_toolkits.mplot3d.art3d import Poly3DCollection
 from plotting import newfig, savefig
 from mpl_toolkits.axes_grid1 import make_axes_locatable
 import matplotlib.gridspec as gridspec
+import tensorflow_probability as tfp
+import deepxde as dde
+tf.compat.v1.disable_eager_execution()
 
 np.random.seed(1234)
-tf.set_random_seed(1234)
+tf.compat.v1.set_random_seed(1234)
+
+TRAIN_ITER = 10
+OPTIMIZE_ITER = 10
 
 class PhysicsInformedNN:
     # Initialize the class
@@ -49,35 +55,35 @@ class PhysicsInformedNN:
         self.lambda_2 = tf.Variable([0.0], dtype=tf.float32)
         
         # tf placeholders and graph
-        self.sess = tf.Session(config=tf.ConfigProto(allow_soft_placement=True,
+        self.sess = tf.compat.v1.Session(config=tf.compat.v1.ConfigProto(allow_soft_placement=True,
                                                      log_device_placement=True))
         
-        self.x_tf = tf.placeholder(tf.float32, shape=[None, self.x.shape[1]])
-        self.y_tf = tf.placeholder(tf.float32, shape=[None, self.y.shape[1]])
-        self.t_tf = tf.placeholder(tf.float32, shape=[None, self.t.shape[1]])
+        self.x_tf = tf.compat.v1.placeholder(tf.float32, shape=[None, self.x.shape[1]])
+        self.y_tf = tf.compat.v1.placeholder(tf.float32, shape=[None, self.y.shape[1]])
+        self.t_tf = tf.compat.v1.placeholder(tf.float32, shape=[None, self.t.shape[1]])
         
-        self.u_tf = tf.placeholder(tf.float32, shape=[None, self.u.shape[1]])
-        self.v_tf = tf.placeholder(tf.float32, shape=[None, self.v.shape[1]])
+        self.u_tf = tf.compat.v1.placeholder(tf.float32, shape=[None, self.u.shape[1]])
+        self.v_tf = tf.compat.v1.placeholder(tf.float32, shape=[None, self.v.shape[1]])
         
         self.u_pred, self.v_pred, self.p_pred, self.f_u_pred, self.f_v_pred = self.net_NS(self.x_tf, self.y_tf, self.t_tf)
         
-        self.loss = tf.reduce_sum(tf.square(self.u_tf - self.u_pred)) + \
-                    tf.reduce_sum(tf.square(self.v_tf - self.v_pred)) + \
-                    tf.reduce_sum(tf.square(self.f_u_pred)) + \
-                    tf.reduce_sum(tf.square(self.f_v_pred))
+        self.loss = tf.reduce_sum(input_tensor=tf.square(self.u_tf - self.u_pred)) + \
+                    tf.reduce_sum(input_tensor=tf.square(self.v_tf - self.v_pred)) + \
+                    tf.reduce_sum(input_tensor=tf.square(self.f_u_pred)) + \
+                    tf.reduce_sum(input_tensor=tf.square(self.f_v_pred))
                     
-        self.optimizer = tf.contrib.opt.ScipyOptimizerInterface(self.loss, 
+        self.optimizer = dde.optimizers.tensorflow_compat_v1.scipy_optimizer.ScipyOptimizerInterface(self.loss, 
                                                                 method = 'L-BFGS-B', 
-                                                                options = {'maxiter': 50000,
+                                                                options = {'maxiter': OPTIMIZE_ITER,
                                                                            'maxfun': 50000,
                                                                            'maxcor': 50,
                                                                            'maxls': 50,
                                                                            'ftol' : 1.0 * np.finfo(float).eps})        
         
-        self.optimizer_Adam = tf.train.AdamOptimizer()
+        self.optimizer_Adam = tf.compat.v1.train.AdamOptimizer()
         self.train_op_Adam = self.optimizer_Adam.minimize(self.loss)                    
         
-        init = tf.global_variables_initializer()
+        init = tf.compat.v1.global_variables_initializer()
         self.sess.run(init)
 
     def initialize_NN(self, layers):        
@@ -95,7 +101,7 @@ class PhysicsInformedNN:
         in_dim = size[0]
         out_dim = size[1]        
         xavier_stddev = np.sqrt(2/(in_dim + out_dim))
-        return tf.Variable(tf.truncated_normal([in_dim, out_dim], stddev=xavier_stddev), dtype=tf.float32)
+        return tf.Variable(tf.random.truncated_normal([in_dim, out_dim], stddev=xavier_stddev), dtype=tf.float32)
     
     def neural_net(self, X, weights, biases):
         num_layers = len(weights) + 1
@@ -118,23 +124,23 @@ class PhysicsInformedNN:
         psi = psi_and_p[:,0:1]
         p = psi_and_p[:,1:2]
         
-        u = tf.gradients(psi, y)[0]
-        v = -tf.gradients(psi, x)[0]  
+        u = tf.gradients(ys=psi, xs=y)[0]
+        v = -tf.gradients(ys=psi, xs=x)[0]  
         
-        u_t = tf.gradients(u, t)[0]
-        u_x = tf.gradients(u, x)[0]
-        u_y = tf.gradients(u, y)[0]
-        u_xx = tf.gradients(u_x, x)[0]
-        u_yy = tf.gradients(u_y, y)[0]
+        u_t = tf.gradients(ys=u, xs=t)[0]
+        u_x = tf.gradients(ys=u, xs=x)[0]
+        u_y = tf.gradients(ys=u, xs=y)[0]
+        u_xx = tf.gradients(ys=u_x, xs=x)[0]
+        u_yy = tf.gradients(ys=u_y, xs=y)[0]
         
-        v_t = tf.gradients(v, t)[0]
-        v_x = tf.gradients(v, x)[0]
-        v_y = tf.gradients(v, y)[0]
-        v_xx = tf.gradients(v_x, x)[0]
-        v_yy = tf.gradients(v_y, y)[0]
+        v_t = tf.gradients(ys=v, xs=t)[0]
+        v_x = tf.gradients(ys=v, xs=x)[0]
+        v_y = tf.gradients(ys=v, xs=y)[0]
+        v_xx = tf.gradients(ys=v_x, xs=x)[0]
+        v_yy = tf.gradients(ys=v_y, xs=y)[0]
         
-        p_x = tf.gradients(p, x)[0]
-        p_y = tf.gradients(p, y)[0]
+        p_x = tf.gradients(ys=p, xs=x)[0]
+        p_y = tf.gradients(ys=p, xs=y)[0]
 
         f_u = u_t + lambda_1*(u*u_x + v*u_y) + p_x - lambda_2*(u_xx + u_yy) 
         f_v = v_t + lambda_1*(u*v_x + v*v_y) + p_y - lambda_2*(v_xx + v_yy)
@@ -252,7 +258,11 @@ if __name__ == "__main__":
 
     # Training
     model = PhysicsInformedNN(x_train, y_train, t_train, u_train, v_train, layers)
-    model.train(200000)
+
+    start_time = time.time()
+    model.train(TRAIN_ITER)
+    elapsed = time.time() - start_time
+    print('Training time: %.4f' % (elapsed))
     
     # Test Data
     snap = np.array([100])
@@ -284,11 +294,11 @@ if __name__ == "__main__":
     print('Error l2: %.5f%%' % (error_lambda_2))                  
     
     # Plot Results
-#    plot_solution(X_star, u_pred, 1)
-#    plot_solution(X_star, v_pred, 2)
-#    plot_solution(X_star, p_pred, 3)    
-#    plot_solution(X_star, p_star, 4)
-#    plot_solution(X_star, p_star - p_pred, 5)
+    plot_solution(X_star, u_pred, 1)
+    plot_solution(X_star, v_pred, 2)
+    plot_solution(X_star, p_pred, 3)    
+    plot_solution(X_star, p_star, 4)
+    plot_solution(X_star, p_star - p_pred, 5)
     
     # Predict for plotting
     lb = X_star.min(0)
@@ -313,7 +323,11 @@ if __name__ == "__main__":
 
     # Training
     model = PhysicsInformedNN(x_train, y_train, t_train, u_train, v_train, layers)
-    model.train(200000)
+
+    start_time = time.time()
+    model.train(TRAIN_ITER)
+    elapsed = time.time() - start_time
+    print('Training time: %.4f' % (elapsed))
         
     lambda_1_value_noisy = model.sess.run(model.lambda_1)
     lambda_2_value_noisy = model.sess.run(model.lambda_2)
@@ -335,8 +349,8 @@ if __name__ == "__main__":
     x_vort = data_vort['x'] 
     y_vort = data_vort['y'] 
     w_vort = data_vort['w'] 
-    modes = np.asscalar(data_vort['modes'])
-    nel = np.asscalar(data_vort['nel'])    
+    modes = np.ndarray.item(data_vort['modes'])
+    nel = np.ndarray.item(data_vort['nel'])    
     
     xx_vort = np.reshape(x_vort, (modes+1,modes+1,nel), order = 'F')
     yy_vort = np.reshape(y_vort, (modes+1,modes+1,nel), order = 'F')
@@ -421,7 +435,7 @@ if __name__ == "__main__":
     ax.set_zlim3d(r3)
     axisEqual3D(ax)
     
-    # savefig('./figures/NavierStokes_data') 
+    savefig('./figures/NavierStokes_data') 
 
     
     fig, ax = newfig(1.015, 0.8)
@@ -488,5 +502,5 @@ if __name__ == "__main__":
  
     ax.text(0.015,0.0,s)
     
-    # savefig('./figures/NavierStokes_prediction') 
+    savefig('./figures/NavierStokes_prediction') 
 

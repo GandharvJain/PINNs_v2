@@ -16,11 +16,15 @@ from mpl_toolkits.mplot3d import Axes3D
 import time
 import matplotlib.gridspec as gridspec
 from mpl_toolkits.axes_grid1 import make_axes_locatable
-
+import tensorflow_probability as tfp
+import deepxde as dde
+tf.compat.v1.disable_eager_execution()
 
 np.random.seed(1234)
-tf.set_random_seed(1234)
+tf.compat.v1.set_random_seed(1234)
 
+TRAIN_ITER = 100
+OPTIMIZE_ITER = 100
 
 class PhysicsInformedNN:
     # Initialize the class
@@ -53,20 +57,20 @@ class PhysicsInformedNN:
         self.weights, self.biases = self.initialize_NN(layers)
         
         # tf Placeholders        
-        self.x0_tf = tf.placeholder(tf.float32, shape=[None, self.x0.shape[1]])
-        self.t0_tf = tf.placeholder(tf.float32, shape=[None, self.t0.shape[1]])
+        self.x0_tf = tf.compat.v1.placeholder(tf.float32, shape=[None, self.x0.shape[1]])
+        self.t0_tf = tf.compat.v1.placeholder(tf.float32, shape=[None, self.t0.shape[1]])
         
-        self.u0_tf = tf.placeholder(tf.float32, shape=[None, self.u0.shape[1]])
-        self.v0_tf = tf.placeholder(tf.float32, shape=[None, self.v0.shape[1]])
+        self.u0_tf = tf.compat.v1.placeholder(tf.float32, shape=[None, self.u0.shape[1]])
+        self.v0_tf = tf.compat.v1.placeholder(tf.float32, shape=[None, self.v0.shape[1]])
         
-        self.x_lb_tf = tf.placeholder(tf.float32, shape=[None, self.x_lb.shape[1]])
-        self.t_lb_tf = tf.placeholder(tf.float32, shape=[None, self.t_lb.shape[1]])
+        self.x_lb_tf = tf.compat.v1.placeholder(tf.float32, shape=[None, self.x_lb.shape[1]])
+        self.t_lb_tf = tf.compat.v1.placeholder(tf.float32, shape=[None, self.t_lb.shape[1]])
         
-        self.x_ub_tf = tf.placeholder(tf.float32, shape=[None, self.x_ub.shape[1]])
-        self.t_ub_tf = tf.placeholder(tf.float32, shape=[None, self.t_ub.shape[1]])
+        self.x_ub_tf = tf.compat.v1.placeholder(tf.float32, shape=[None, self.x_ub.shape[1]])
+        self.t_ub_tf = tf.compat.v1.placeholder(tf.float32, shape=[None, self.t_ub.shape[1]])
         
-        self.x_f_tf = tf.placeholder(tf.float32, shape=[None, self.x_f.shape[1]])
-        self.t_f_tf = tf.placeholder(tf.float32, shape=[None, self.t_f.shape[1]])
+        self.x_f_tf = tf.compat.v1.placeholder(tf.float32, shape=[None, self.x_f.shape[1]])
+        self.t_f_tf = tf.compat.v1.placeholder(tf.float32, shape=[None, self.t_f.shape[1]])
 
         # tf Graphs
         self.u0_pred, self.v0_pred, _ , _ = self.net_uv(self.x0_tf, self.t0_tf)
@@ -75,32 +79,32 @@ class PhysicsInformedNN:
         self.f_u_pred, self.f_v_pred = self.net_f_uv(self.x_f_tf, self.t_f_tf)
         
         # Loss
-        self.loss = tf.reduce_mean(tf.square(self.u0_tf - self.u0_pred)) + \
-                    tf.reduce_mean(tf.square(self.v0_tf - self.v0_pred)) + \
-                    tf.reduce_mean(tf.square(self.u_lb_pred - self.u_ub_pred)) + \
-                    tf.reduce_mean(tf.square(self.v_lb_pred - self.v_ub_pred)) + \
-                    tf.reduce_mean(tf.square(self.u_x_lb_pred - self.u_x_ub_pred)) + \
-                    tf.reduce_mean(tf.square(self.v_x_lb_pred - self.v_x_ub_pred)) + \
-                    tf.reduce_mean(tf.square(self.f_u_pred)) + \
-                    tf.reduce_mean(tf.square(self.f_v_pred))
+        self.loss = tf.reduce_mean(input_tensor=tf.square(self.u0_tf - self.u0_pred)) + \
+                    tf.reduce_mean(input_tensor=tf.square(self.v0_tf - self.v0_pred)) + \
+                    tf.reduce_mean(input_tensor=tf.square(self.u_lb_pred - self.u_ub_pred)) + \
+                    tf.reduce_mean(input_tensor=tf.square(self.v_lb_pred - self.v_ub_pred)) + \
+                    tf.reduce_mean(input_tensor=tf.square(self.u_x_lb_pred - self.u_x_ub_pred)) + \
+                    tf.reduce_mean(input_tensor=tf.square(self.v_x_lb_pred - self.v_x_ub_pred)) + \
+                    tf.reduce_mean(input_tensor=tf.square(self.f_u_pred)) + \
+                    tf.reduce_mean(input_tensor=tf.square(self.f_v_pred))
         
         # Optimizers
-        self.optimizer = tf.contrib.opt.ScipyOptimizerInterface(self.loss, 
+        self.optimizer = dde.optimizers.tensorflow_compat_v1.scipy_optimizer.ScipyOptimizerInterface(self.loss, 
                                                                 method = 'L-BFGS-B', 
-                                                                options = {'maxiter': 50000,
+                                                                options = {'maxiter': OPTIMIZE_ITER,
                                                                            'maxfun': 50000,
                                                                            'maxcor': 50,
                                                                            'maxls': 50,
                                                                            'ftol' : 1.0 * np.finfo(float).eps})
     
-        self.optimizer_Adam = tf.train.AdamOptimizer()
+        self.optimizer_Adam = tf.compat.v1.train.AdamOptimizer()
         self.train_op_Adam = self.optimizer_Adam.minimize(self.loss)
                 
         # tf session
-        self.sess = tf.Session(config=tf.ConfigProto(allow_soft_placement=True,
+        self.sess = tf.compat.v1.Session(config=tf.compat.v1.ConfigProto(allow_soft_placement=True,
                                                      log_device_placement=True))
         
-        init = tf.global_variables_initializer()
+        init = tf.compat.v1.global_variables_initializer()
         self.sess.run(init)
               
     def initialize_NN(self, layers):        
@@ -118,7 +122,7 @@ class PhysicsInformedNN:
         in_dim = size[0]
         out_dim = size[1]        
         xavier_stddev = np.sqrt(2/(in_dim + out_dim))
-        return tf.Variable(tf.truncated_normal([in_dim, out_dim], stddev=xavier_stddev), dtype=tf.float32)
+        return tf.Variable(tf.random.truncated_normal([in_dim, out_dim], stddev=xavier_stddev), dtype=tf.float32)
     
     def neural_net(self, X, weights, biases):
         num_layers = len(weights) + 1
@@ -140,19 +144,19 @@ class PhysicsInformedNN:
         u = uv[:,0:1]
         v = uv[:,1:2]
         
-        u_x = tf.gradients(u, x)[0]
-        v_x = tf.gradients(v, x)[0]
+        u_x = tf.gradients(ys=u, xs=x)[0]
+        v_x = tf.gradients(ys=v, xs=x)[0]
 
         return u, v, u_x, v_x
 
     def net_f_uv(self, x, t):
         u, v, u_x, v_x = self.net_uv(x,t)
         
-        u_t = tf.gradients(u, t)[0]
-        u_xx = tf.gradients(u_x, x)[0]
+        u_t = tf.gradients(ys=u, xs=t)[0]
+        u_xx = tf.gradients(ys=u_x, xs=x)[0]
         
-        v_t = tf.gradients(v, t)[0]
-        v_xx = tf.gradients(v_x, x)[0]
+        v_t = tf.gradients(ys=v, xs=t)[0]
+        v_xx = tf.gradients(ys=v_x, xs=x)[0]
         
         f_u = u_t + 0.5*v_xx + (u**2 + v**2)*v
         f_v = v_t - 0.5*u_xx - (u**2 + v**2)*u   
@@ -245,10 +249,10 @@ if __name__ == "__main__":
     X_f = lb + (ub-lb)*lhs(2, N_f)
             
     model = PhysicsInformedNN(x0, u0, v0, tb, X_f, layers, lb, ub)
-             
-    start_time = time.time()                
-    model.train(50000)
-    elapsed = time.time() - start_time                
+
+    start_time = time.time()
+    model.train(TRAIN_ITER)
+    elapsed = time.time() - start_time
     print('Training time: %.4f' % (elapsed))
     
         
@@ -344,5 +348,5 @@ if __name__ == "__main__":
     ax.set_ylim([-0.1,5.1])    
     ax.set_title('$t = %.2f$' % (t[125]), fontsize = 10)
     
-    # savefig('./figures/NLS')  
+    savefig('./figures/NLS')  
     

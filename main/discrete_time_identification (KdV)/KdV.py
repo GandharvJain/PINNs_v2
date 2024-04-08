@@ -14,10 +14,15 @@ from plotting import newfig, savefig
 from mpl_toolkits.mplot3d import Axes3D
 import matplotlib.gridspec as gridspec
 from mpl_toolkits.axes_grid1 import make_axes_locatable
+import tensorflow_probability as tfp
+import deepxde as dde
+tf.compat.v1.disable_eager_execution()
 
 np.random.seed(1234)
-tf.set_random_seed(1234)
+tf.compat.v1.set_random_seed(1234)
 
+TRAIN_ITER = 10
+OPTIMIZE_ITER = 10
 
 class PhysicsInformedNN:
     # Initialize the class
@@ -51,34 +56,34 @@ class PhysicsInformedNN:
         self.IRK_times = tmp[q**2+q:]
         
         # tf placeholders and graph
-        self.sess = tf.Session(config=tf.ConfigProto(allow_soft_placement=True,
+        self.sess = tf.compat.v1.Session(config=tf.compat.v1.ConfigProto(allow_soft_placement=True,
                                                      log_device_placement=True))
         
-        self.x0_tf = tf.placeholder(tf.float32, shape=(None, self.x0.shape[1]))
-        self.x1_tf = tf.placeholder(tf.float32, shape=(None, self.x1.shape[1]))
-        self.u0_tf = tf.placeholder(tf.float32, shape=(None, self.u0.shape[1]))
-        self.u1_tf = tf.placeholder(tf.float32, shape=(None, self.u1.shape[1]))
-        self.dummy_x0_tf = tf.placeholder(tf.float32, shape=(None, self.q)) # dummy variable for fwd_gradients        
-        self.dummy_x1_tf = tf.placeholder(tf.float32, shape=(None, self.q)) # dummy variable for fwd_gradients        
+        self.x0_tf = tf.compat.v1.placeholder(tf.float32, shape=(None, self.x0.shape[1]))
+        self.x1_tf = tf.compat.v1.placeholder(tf.float32, shape=(None, self.x1.shape[1]))
+        self.u0_tf = tf.compat.v1.placeholder(tf.float32, shape=(None, self.u0.shape[1]))
+        self.u1_tf = tf.compat.v1.placeholder(tf.float32, shape=(None, self.u1.shape[1]))
+        self.dummy_x0_tf = tf.compat.v1.placeholder(tf.float32, shape=(None, self.q)) # dummy variable for fwd_gradients        
+        self.dummy_x1_tf = tf.compat.v1.placeholder(tf.float32, shape=(None, self.q)) # dummy variable for fwd_gradients        
         
         self.U0_pred = self.net_U0(self.x0_tf) # N0 x q
         self.U1_pred = self.net_U1(self.x1_tf) # N1 x q
         
-        self.loss = tf.reduce_sum(tf.square(self.u0_tf - self.U0_pred)) + \
-                    tf.reduce_sum(tf.square(self.u1_tf - self.U1_pred)) 
+        self.loss = tf.reduce_sum(input_tensor=tf.square(self.u0_tf - self.U0_pred)) + \
+                    tf.reduce_sum(input_tensor=tf.square(self.u1_tf - self.U1_pred)) 
         
-        self.optimizer = tf.contrib.opt.ScipyOptimizerInterface(self.loss, 
+        self.optimizer = dde.optimizers.tensorflow_compat_v1.scipy_optimizer.ScipyOptimizerInterface(self.loss, 
                                                                 method = 'L-BFGS-B', 
-                                                                options = {'maxiter': 50000,
+                                                                options = {'maxiter': OPTIMIZE_ITER,
                                                                            'maxfun': 50000,
                                                                            'maxcor': 50,
                                                                            'maxls': 50,
                                                                            'ftol' : 1.0 * np.finfo(float).eps})        
         
-        self.optimizer_Adam = tf.train.AdamOptimizer()
+        self.optimizer_Adam = tf.compat.v1.train.AdamOptimizer()
         self.train_op_Adam = self.optimizer_Adam.minimize(self.loss)
         
-        init = tf.global_variables_initializer()
+        init = tf.compat.v1.global_variables_initializer()
         self.sess.run(init)
         
     def initialize_NN(self, layers):        
@@ -96,7 +101,7 @@ class PhysicsInformedNN:
         in_dim = size[0]
         out_dim = size[1]        
         xavier_stddev = np.sqrt(2/(in_dim + out_dim))
-        return tf.Variable(tf.truncated_normal([in_dim, out_dim], stddev=xavier_stddev), dtype=tf.float32)
+        return tf.Variable(tf.random.truncated_normal([in_dim, out_dim], stddev=xavier_stddev), dtype=tf.float32)
     
     def neural_net(self, X, weights, biases):
         num_layers = len(weights) + 1
@@ -112,12 +117,12 @@ class PhysicsInformedNN:
         return Y
     
     def fwd_gradients_0(self, U, x):        
-        g = tf.gradients(U, x, grad_ys=self.dummy_x0_tf)[0]
-        return tf.gradients(g, self.dummy_x0_tf)[0]
+        g = tf.gradients(ys=U, xs=x, grad_ys=self.dummy_x0_tf)[0]
+        return tf.gradients(ys=g, xs=self.dummy_x0_tf)[0]
     
     def fwd_gradients_1(self, U, x):        
-        g = tf.gradients(U, x, grad_ys=self.dummy_x1_tf)[0]
-        return tf.gradients(g, self.dummy_x1_tf)[0]    
+        g = tf.gradients(ys=U, xs=x, grad_ys=self.dummy_x1_tf)[0]
+        return tf.gradients(ys=g, xs=self.dummy_x1_tf)[0]    
     
     def net_U0(self, x):
         lambda_1 = self.lambda_1
@@ -209,15 +214,19 @@ if __name__ == "__main__":
     u1 = Exact[idx_x,idx_t + skip][:,None]
     u1 = u1 + noise*np.std(u1)*np.random.randn(u1.shape[0], u1.shape[1])
     
-    dt = np.asscalar(t_star[idx_t+skip] - t_star[idx_t])        
+    dt = np.ndarray.item(t_star[idx_t+skip] - t_star[idx_t])
         
     # Doman bounds
     lb = x_star.min(0)
     ub = x_star.max(0)
 
     model = PhysicsInformedNN(x0, u0, x1, u1, layers, dt, lb, ub, q)
-    model.train(nIter = 50000)
-    
+
+    start_time = time.time()
+    model.train(TRAIN_ITER)
+    elapsed = time.time() - start_time
+    print('Training time: %.4f' % (elapsed))
+
     U0_pred, U1_pred = model.predict(x_star)    
         
     lambda_1_value = model.sess.run(model.lambda_1)
@@ -239,8 +248,12 @@ if __name__ == "__main__":
     u1 = u1 + noise*np.std(u1)*np.random.randn(u1.shape[0], u1.shape[1])
     
     model = PhysicsInformedNN(x0, u0, x1, u1, layers, dt, lb, ub, q)    
-    model.train(nIter = 50000)
-    
+
+    start_time = time.time()
+    model.train(TRAIN_ITER)
+    elapsed = time.time() - start_time
+    print('Training time: %.4f' % (elapsed))
+
     U_pred = model.predict(x_star)
     
     U0_pred, U1_pred = model.predict(x_star)    
@@ -310,4 +323,4 @@ if __name__ == "__main__":
     s = s1+s2+s3+s4+s5
     ax.text(-0.1,0.2,s)
 
-    # savefig('./figures/KdV') 
+    savefig('./figures/KdV') 
