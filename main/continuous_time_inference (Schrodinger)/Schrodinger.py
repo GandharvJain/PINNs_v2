@@ -21,6 +21,8 @@ from mpl_toolkits.axes_grid1 import make_axes_locatable
 np.random.seed(1234)
 tf.set_random_seed(1234)
 
+TRAIN_ITER = 500
+OPTIMIZE_ITER = 500
 
 class PhysicsInformedNN:
     # Initialize the class
@@ -87,7 +89,7 @@ class PhysicsInformedNN:
         # Optimizers
         self.optimizer = tf.contrib.opt.ScipyOptimizerInterface(self.loss, 
                                                                 method = 'L-BFGS-B', 
-                                                                options = {'maxiter': 50000,
+                                                                options = {'maxiter': OPTIMIZE_ITER,
                                                                            'maxfun': 50000,
                                                                            'maxcor': 50,
                                                                            'maxls': 50,
@@ -245,10 +247,10 @@ if __name__ == "__main__":
     X_f = lb + (ub-lb)*lhs(2, N_f)
             
     model = PhysicsInformedNN(x0, u0, v0, tb, X_f, layers, lb, ub)
-             
-    start_time = time.time()                
-    model.train(50000)
-    elapsed = time.time() - start_time                
+
+    start_time = time.time()
+    model.train(TRAIN_ITER)
+    elapsed = time.time() - start_time
     print('Training time: %.4f' % (elapsed))
     
         
@@ -344,5 +346,5 @@ if __name__ == "__main__":
     ax.set_ylim([-0.1,5.1])    
     ax.set_title('$t = %.2f$' % (t[125]), fontsize = 10)
     
-    # savefig('./figures/NLS')  
+    savefig('./figures/NLS')  
     

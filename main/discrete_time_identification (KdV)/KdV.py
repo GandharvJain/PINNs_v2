@@ -18,6 +18,8 @@ from mpl_toolkits.axes_grid1 import make_axes_locatable
 np.random.seed(1234)
 tf.set_random_seed(1234)
 
+TRAIN_ITER = 1000
+OPTIMIZE_ITER = 1000
 
 class PhysicsInformedNN:
     # Initialize the class
@@ -69,7 +71,7 @@ class PhysicsInformedNN:
         
         self.optimizer = tf.contrib.opt.ScipyOptimizerInterface(self.loss, 
                                                                 method = 'L-BFGS-B', 
-                                                                options = {'maxiter': 50000,
+                                                                options = {'maxiter': OPTIMIZE_ITER,
                                                                            'maxfun': 50000,
                                                                            'maxcor': 50,
                                                                            'maxls': 50,
@@ -216,8 +218,12 @@ if __name__ == "__main__":
     ub = x_star.max(0)
 
     model = PhysicsInformedNN(x0, u0, x1, u1, layers, dt, lb, ub, q)
-    model.train(nIter = 50000)
-    
+
+    start_time = time.time()
+    model.train(TRAIN_ITER)
+    elapsed = time.time() - start_time
+    print('Training time: %.4f' % (elapsed))
+
     U0_pred, U1_pred = model.predict(x_star)    
         
     lambda_1_value = model.sess.run(model.lambda_1)
@@ -239,8 +245,12 @@ if __name__ == "__main__":
     u1 = u1 + noise*np.std(u1)*np.random.randn(u1.shape[0], u1.shape[1])
     
     model = PhysicsInformedNN(x0, u0, x1, u1, layers, dt, lb, ub, q)    
-    model.train(nIter = 50000)
-    
+
+    start_time = time.time()
+    model.train(TRAIN_ITER)
+    elapsed = time.time() - start_time
+    print('Training time: %.4f' % (elapsed))
+
     U_pred = model.predict(x_star)
     
     U0_pred, U1_pred = model.predict(x_star)    
@@ -310,4 +320,4 @@ if __name__ == "__main__":
     s = s1+s2+s3+s4+s5
     ax.text(-0.1,0.2,s)
 
-    # savefig('./figures/KdV') 
+    savefig('./figures/KdV') 
