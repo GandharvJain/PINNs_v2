@@ -1,0 +1,4 @@
+*.log
+*.eps
+*.pdf
+__pycache__
