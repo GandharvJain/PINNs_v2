@@ -21,8 +21,8 @@ from mpl_toolkits.axes_grid1 import make_axes_locatable
 np.random.seed(1234)
 tf.set_random_seed(1234)
 
-TRAIN_ITER = 500
-OPTIMIZE_ITER = 500
+TRAIN_ITER = 20
+OPTIMIZE_ITER = 20
 
 class PhysicsInformedNN:
     # Initialize the class
